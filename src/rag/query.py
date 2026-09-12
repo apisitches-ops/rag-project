@@ -25,7 +25,7 @@ On the final line of your reply, output exactly "Used: " followed by a comma-sep
 of the chunk numbers you actually drew on to answer (e.g. "Used: 1, 3"), or "Used: none" if \
 you couldn't answer from the chunks."""
 
-_USED_LINE = re.compile(r"^\s*used:\s*(.*)$", re.IGNORECASE)
+_USED_LINE = re.compile(r"^used:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
 
 
 def retrieve(vector_store: Chroma, question: str, k: int = TOP_K) -> list[tuple[Chunk, float]]:
@@ -41,13 +41,20 @@ def _format_chunks(chunks: list[Chunk]) -> str:
 
 
 def _extract_used_line(answer: str) -> tuple[str, str | None]:
-    """Split off the trailing 'Used: ...' marker line, if the model included one."""
-    lines = answer.rstrip().splitlines()
-    if lines:
-        match = _USED_LINE.match(lines[-1])
-        if match:
-            return "\n".join(lines[:-1]).strip(), match.group(1).strip()
-    return answer.strip(), None
+    """Pull out the 'Used: ...' marker line the model was asked to include.
+
+    Matched anywhere a line starts with it (re.MULTILINE), not just when
+    it's the literal last line - models often add trailing remarks after
+    it - but anchored to line-start so "the fuel used: coal" mid-sentence
+    isn't mistaken for the marker. If it appears more than once, the last
+    occurrence is taken as the intended one.
+    """
+    matches = list(_USED_LINE.finditer(answer))
+    if not matches:
+        return answer.strip(), None
+    match = matches[-1]
+    remaining = (answer[: match.start()] + answer[match.end() :]).strip()
+    return remaining, match.group(1).strip()
 
 
 def _parse_used_indices(used_value: str | None, chunk_count: int) -> set[int]:
@@ -104,7 +111,10 @@ def _run_interactive(vector_store: Chroma, llm: ChatOllama) -> None:
             continue
         if question.lower() in {"exit", "quit"}:
             break
-        print(answer_question(vector_store, llm, question))
+        try:
+            print(answer_question(vector_store, llm, question))
+        except Exception as e:
+            print(f"Error answering that question: {e}")
         print()
 
 
