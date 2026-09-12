@@ -13,19 +13,19 @@ SIMILARITY_THRESHOLD = 0.3
 
 _THAI_CHAR_PATTERN = re.compile(r"[ก-๙]")
 
-PROMPT_TEMPLATE = """Answer the question using ONLY the numbered passages below. Reply in the \
-same language the question was asked in (Thai or English). If the passages don't contain \
+PROMPT_TEMPLATE = """Answer the question using ONLY the numbered chunks below. Reply in the \
+same language the question was asked in (Thai or English). If the chunks don't contain \
 the answer, say so instead of guessing.
 
-{passages}
+{chunks}
 
 Question: {question}
 
 On the final line of your reply, output exactly "Used: " followed by a comma-separated list \
-of the passage numbers you actually drew on to answer (e.g. "Used: 1, 3"), or "Used: none" if \
-you couldn't answer from the passages."""
+of the chunk numbers you actually drew on to answer (e.g. "Used: 1, 3"), or "Used: none" if \
+you couldn't answer from the chunks."""
 
-_USED_LINE = re.compile(r"used:\s*(.*)", re.IGNORECASE)
+_USED_LINE = re.compile(r"^\s*used:\s*(.*)$", re.IGNORECASE)
 
 
 def retrieve(vector_store: Chroma, question: str, k: int = TOP_K) -> list[tuple[Chunk, float]]:
@@ -36,17 +36,27 @@ def retrieve(vector_store: Chroma, question: str, k: int = TOP_K) -> list[tuple[
     ]
 
 
-def _format_passages(chunks: list[Chunk]) -> str:
+def _format_chunks(chunks: list[Chunk]) -> str:
     return "\n\n".join(f"[{i}] (from {chunk.source}, page {chunk.page})\n{chunk.text}" for i, chunk in enumerate(chunks, start=1))
 
 
-def _parse_used_indices(answer: str, chunk_count: int) -> set[int]:
-    match = _USED_LINE.search(answer)
-    if not match:
+def _extract_used_line(answer: str) -> tuple[str, str | None]:
+    """Split off the trailing 'Used: ...' marker line, if the model included one."""
+    lines = answer.rstrip().splitlines()
+    if lines:
+        match = _USED_LINE.match(lines[-1])
+        if match:
+            return "\n".join(lines[:-1]).strip(), match.group(1).strip()
+    return answer.strip(), None
+
+
+def _parse_used_indices(used_value: str | None, chunk_count: int) -> set[int]:
+    if used_value is None:
+        # No marker line at all: the model didn't follow the format, so fall
+        # back to citing everything retrieved rather than nothing.
         return set(range(1, chunk_count + 1))
-    numbers = re.findall(r"\d+", match.group(1))
-    used = {int(n) for n in numbers if 1 <= int(n) <= chunk_count}
-    return used or set(range(1, chunk_count + 1))
+    numbers = re.findall(r"\d+", used_value)
+    return {int(n) for n in numbers if 1 <= int(n) <= chunk_count}
 
 
 def _format_citations(chunks: list[Chunk], used_indices: set[int]) -> str:
@@ -68,15 +78,15 @@ def _no_match_response(question: str) -> str:
 
 def answer_question(vector_store: Chroma, llm: ChatOllama, question: str) -> str:
     scored_chunks = retrieve(vector_store, question)
-    if select_chunks(scored_chunks, threshold=SIMILARITY_THRESHOLD) is None:
+    chunks = select_chunks(scored_chunks, threshold=SIMILARITY_THRESHOLD)
+    if chunks is None:
         return _no_match_response(question)
 
-    chunks = [chunk for chunk, _ in scored_chunks]
-    prompt = PROMPT_TEMPLATE.format(passages=_format_passages(chunks), question=question)
+    prompt = PROMPT_TEMPLATE.format(chunks=_format_chunks(chunks), question=question)
     raw_answer = llm.invoke(prompt).content
 
-    used_indices = _parse_used_indices(raw_answer, len(chunks))
-    answer = _USED_LINE.sub("", raw_answer).strip()
+    answer, used_value = _extract_used_line(raw_answer)
+    used_indices = _parse_used_indices(used_value, len(chunks))
     citations = _format_citations(chunks, used_indices)
 
     return f"{answer}\n\nSources:\n{citations}" if citations else answer
