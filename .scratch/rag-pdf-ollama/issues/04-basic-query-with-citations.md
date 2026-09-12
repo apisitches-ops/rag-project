@@ -13,3 +13,9 @@
 - [ ] Asking a question in Thai returns an answer in Thai; asking the equivalent question in English returns an answer in English
 - [ ] The answer is displayed together with a Citation (source filename + page number) for each Chunk that was actually used to produce it
 - [ ] Asking a factual question answerable from the ingested PTT report returns a correct, cited answer
+
+## Comments
+
+Done in `233ec82`. Code review found `select_chunks` from ticket 01 wasn't wired
+in yet (expected - that's ticket 05) plus citation-parsing bugs shared with
+ticket 05; both fixed together in `e3b00c4`.

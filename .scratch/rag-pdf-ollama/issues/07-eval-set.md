@@ -10,3 +10,8 @@
 - [ ] Questions are phrased in Thai (matching the primary use case) and cover a mix of simple factual lookups and at least one question expected to fall outside the document's content (to exercise the no-match path)
 - [ ] A short written procedure explains how to run each Eval Set question against the query entry point and what to compare the response against
 - [ ] Running the full Eval Set against the current implementation is documented as producing correct, cited answers for the in-scope questions and a "no relevant information found" response for the out-of-scope one
+
+## Comments
+
+Done in `ff1d1b0`. See `docs/eval-set.md` for the questions, procedure, and the
+last verified run. All 7 tickets in this spec are now implemented.

@@ -11,3 +11,9 @@
 - [ ] Adding a second PDF to the raw-documents folder and re-running ingestion processes only the new file
 - [ ] Re-running ingestion with no new files added makes no new embedding calls and leaves the vector store unchanged
 - [ ] The vector store ends up containing Chunks from both Documents, each still correctly tagged with its own source filename and page numbers
+
+## Comments
+
+Done in `a805f07`. Code review found 3 issues (partial-ingest left permanently
+skipped, one bad PDF aborting the whole run, case-sensitive `.pdf` glob) - fixed
+in `e12927f`.

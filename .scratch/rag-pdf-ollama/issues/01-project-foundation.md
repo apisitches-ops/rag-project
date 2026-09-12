@@ -13,3 +13,7 @@
 - [ ] All three functions are pure: no network calls, no file I/O, no calls to Ollama or the vector store
 - [ ] Unit tests cover each function using fabricated input strings/scores — no real PDF, no real model, no real vector store involved
 - [ ] Unit tests run and pass without Ollama running and without any model pulled
+
+## Comments
+
+Done in `1ec91e8`. Code review: clean.

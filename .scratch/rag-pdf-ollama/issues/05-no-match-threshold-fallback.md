@@ -11,3 +11,9 @@
 - [ ] If at least one Chunk clears the threshold, behavior is unchanged from ticket 04 (answer + citations)
 - [ ] Asking a question clearly unrelated to the ingested Document(s) (e.g. about an unrelated topic) reliably produces the "no relevant information found" response rather than a fabricated answer
 - [ ] Asking a question that ticket 04 already answered correctly still works the same way
+
+## Comments
+
+Done in `48a9055`. Code review found `select_chunks`'s filtered result was
+discarded (only used as a gate, chunks rebuilt from the unfiltered list) - fixed
+in `e3b00c4` alongside ticket 04's citation-parsing fixes.

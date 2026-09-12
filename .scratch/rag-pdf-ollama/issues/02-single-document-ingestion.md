@@ -12,3 +12,7 @@
 - [ ] Each Chunk's vector, text, source filename, and page number are written to a local, persistent Chroma collection
 - [ ] Running ingestion once against the one PDF completes without error and leaves the vector store non-empty
 - [ ] Inspecting the vector store afterward shows Chunks whose metadata correctly identifies the source filename and page number they came from
+
+## Comments
+
+Done in `b6de956`. Code review: clean.
