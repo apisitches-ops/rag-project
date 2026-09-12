@@ -1,0 +1,7 @@
+langchain-text-splitters
+langchain-ollama
+langchain-chroma
+chromadb
+pypdf
+pythainlp
+pytest
