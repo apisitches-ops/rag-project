@@ -5,10 +5,13 @@ from langchain_chroma import Chroma
 from langchain_ollama import ChatOllama
 
 from rag.ingest import get_vector_store
-from rag.text_processing import Chunk
+from rag.text_processing import Chunk, select_chunks
 
 GENERATION_MODEL = "llama3.1:8b"
 TOP_K = 5
+SIMILARITY_THRESHOLD = 0.3
+
+_THAI_CHAR_PATTERN = re.compile(r"[ก-๙]")
 
 PROMPT_TEMPLATE = """Answer the question using ONLY the numbered passages below. Reply in the \
 same language the question was asked in (Thai or English). If the passages don't contain \
@@ -57,10 +60,18 @@ def _format_citations(chunks: list[Chunk], used_indices: set[int]) -> str:
     return "\n".join(f"- {tag}" for tag in tags)
 
 
+def _no_match_response(question: str) -> str:
+    if _THAI_CHAR_PATTERN.search(question):
+        return "ไม่พบข้อมูลที่เกี่ยวข้องในเอกสารที่มีอยู่สำหรับคำถามนี้"
+    return "No relevant information was found in the ingested documents for this question."
+
+
 def answer_question(vector_store: Chroma, llm: ChatOllama, question: str) -> str:
     scored_chunks = retrieve(vector_store, question)
-    chunks = [chunk for chunk, _ in scored_chunks]
+    if select_chunks(scored_chunks, threshold=SIMILARITY_THRESHOLD) is None:
+        return _no_match_response(question)
 
+    chunks = [chunk for chunk, _ in scored_chunks]
     prompt = PROMPT_TEMPLATE.format(passages=_format_passages(chunks), question=question)
     raw_answer = llm.invoke(prompt).content
 
