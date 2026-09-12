@@ -12,7 +12,7 @@ import sys
 from langchain_ollama import ChatOllama
 
 from rag.ingest import get_vector_store
-from rag.query import answer_question
+from rag.query import GENERATION_MODEL, GENERATION_NUM_CTX, answer_question
 
 QUESTIONS = [
     # EASY (10)
@@ -78,7 +78,7 @@ QUESTIONS = [
 
 def main() -> None:
     vector_store = get_vector_store()
-    llm = ChatOllama(model="llama3.1:8b")
+    llm = ChatOllama(model=GENERATION_MODEL, num_ctx=GENERATION_NUM_CTX)
 
     results = []
     for i, (difficulty, question, expected, page) in enumerate(QUESTIONS, start=1):

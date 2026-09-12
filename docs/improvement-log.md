@@ -186,3 +186,28 @@ independent of the 30-question score:
 majority-vote or any other mitigation for the numeric-extraction limitation now.** It's
 recorded as a known limitation - see the flakiness note above and this round's Q19/Q26
 findings - for a future session to pick up if wanted.
+
+**Correction:** the very re-run used to "verify" this round's fixes had its own bug -
+`scripts/eval30.py` built its own `ChatOllama(model="llama3.1:8b")` without `num_ctx`,
+so that 27/30 re-run was **not actually protected** against the truncation risk it was
+meant to confirm was fixed (a second `/code-review` pass on this round caught it: the
+script also hardcoded the model name instead of importing `GENERATION_MODEL`, a separate
+drift risk). Fixed by importing both `GENERATION_MODEL` and `GENERATION_NUM_CTX` from
+`rag.query` into the script instead of duplicating them. Re-ran for real:
+
+## Final verified score: 28/30 (93%)
+
+| Tier | Score |
+|------|-------|
+| Easy | 10/10 |
+| Medium | 10/10 |
+| Hard | 8/10 (Q23 - "which of 3 years had the highest assets" - still answers "2567"/wrong; Q27 still describes the surrounding context without a crisp yes/no) |
+
+**23/30 (77%) → 28/30 (93%)** across this session's two rounds plus the code-review
+follow-up. Q26 (subsidiary equity), which had been a persistent, confirmed-reproducible
+failure through every prior measurement, passed cleanly with `num_ctx` actually applied
+- consistent with the context-truncation hypothesis after all, just not provable until
+the eval script itself was fixed to test it honestly. Q23 remains the clearest
+outstanding case: a genuine 3-way numeric comparison across a table row, still answered
+wrong. Stopping here per instruction - `scripts/eval30.py` (now correctly wired to
+`rag.query`'s actual generation settings) is available to re-measure if work resumes.
