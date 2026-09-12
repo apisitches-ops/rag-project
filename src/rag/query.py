@@ -13,6 +13,12 @@ TOP_K = 10
 SIMILARITY_THRESHOLD = 0.3
 MAX_KEYWORD_PHRASES = 5
 KEYWORD_MATCHES_PER_PHRASE = 5
+# Embedding search (up to TOP_K) plus keyword-phrase fallback (up to
+# MAX_KEYWORD_PHRASES * KEYWORD_MATCHES_PER_PHRASE more) can assemble a large
+# prompt; Ollama's context-window default (2048-4096 depending on version) is
+# too small for that and silently truncates rather than erroring, so it's set
+# explicitly here with headroom.
+GENERATION_NUM_CTX = 16384
 
 _THAI_CHAR_PATTERN = re.compile(r"[ก-๙]")
 
@@ -52,11 +58,18 @@ def _keyword_phrases(question: str) -> list[str]:
     rank. Not filtered by stopwords: a word like "รวม" ("total") is generic
     alone but load-bearing as part of a compound term.
     """
-    tokens = [t for t in word_tokenize(question, engine="newmm") if _THAI_CHAR_PATTERN.search(t)]
+    # Window over the ORIGINAL token sequence (not a pre-filtered one), so a
+    # phrase is only formed from tokens genuinely adjacent in the question -
+    # filtering non-Thai tokens out first would let e.g. "ปี" and "ของ"
+    # (with a number and whitespace token between them) look adjacent and
+    # get joined into a phantom, never-actually-adjacent "phrase".
+    tokens = word_tokenize(question, engine="newmm")
     phrases = set()
     for n in (3, 2):
         for i in range(len(tokens) - n + 1):
-            phrases.add(" ".join(tokens[i : i + n]))
+            window = tokens[i : i + n]
+            if all(_THAI_CHAR_PATTERN.search(t) for t in window):
+                phrases.add(" ".join(window))
     return sorted(phrases, key=len, reverse=True)[:MAX_KEYWORD_PHRASES]
 
 
@@ -194,7 +207,7 @@ def _run_interactive(vector_store: Chroma, llm: ChatOllama) -> None:
 def main() -> None:
     question = " ".join(sys.argv[1:])
     vector_store = get_vector_store()
-    llm = ChatOllama(model=GENERATION_MODEL)
+    llm = ChatOllama(model=GENERATION_MODEL, num_ctx=GENERATION_NUM_CTX)
 
     if question:
         print(answer_question(vector_store, llm, question))

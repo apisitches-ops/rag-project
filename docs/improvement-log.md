@@ -139,3 +139,50 @@ table rows** (Q14, Q23, Q26, Q27), not a code-level retrieval or chunking bug - 
 different, harder class of problem than what this session set out to fix. Stopping here
 per the MVP scope of this exercise; `scripts/eval30.py` remains available to
 re-measure if further work is done later.
+
+---
+
+## Round 3: code-review follow-up (no eval-score target, correctness fixes)
+
+`/code-review` on Round 2's commit found two real bugs in the new hybrid-retrieval code,
+independent of the 30-question score:
+
+1. **Silent context-window truncation risk.** Hybrid retrieval can now assemble up to
+   `TOP_K` (10) + `MAX_KEYWORD_PHRASES × KEYWORD_MATCHES_PER_PHRASE` (25) chunks, but
+   `ChatOllama` was constructed with no `num_ctx`, so Ollama's default (2048-4096
+   depending on version) could be silently exceeded - Ollama truncates rather than
+   erroring, so retrieved evidence (including the keyword-matched chunks Round 2 added
+   specifically to fix retrieval) could silently never reach the model. **Fix:** set
+   `num_ctx=16384` explicitly (`GENERATION_NUM_CTX`).
+2. **Phantom n-grams from non-adjacent tokens.** `_keyword_phrases` filtered the
+   tokenized question down to Thai-only tokens *before* forming n-grams, so two tokens
+   separated by a number/English word/punctuation in the real question could be joined
+   into a phrase that was never actually adjacent (e.g. "ปี" ... "ของ" with "2567" and
+   whitespace tokens between them becoming the phantom phrase "ปี ของ"). **Fix:** form
+   n-grams over the original token sequence first, then keep only windows where every
+   token is Thai script - preserves true adjacency instead of filtering-then-joining.
+
+**Verification:**
+- `_keyword_phrases("สินทรัพย์รวมปี 2567 ของ ปตท. เท่าไหร่")` (the reviewer's exact
+  reproduction case) no longer produces a "ปี ของ" phantom phrase, while still correctly
+  producing "สินทรัพย์ รวม" from the genuinely-adjacent tokens.
+- Re-ran the previously-flaky subsidiary-equity question (Q26) 3x with `num_ctx` set:
+  all 3 runs now give the **same** (still wrong) answer, 481,102 instead of 507,225 -
+  this is informative rather than a non-result: it confirms Q26 was never actually
+  context-truncation-flakiness, it's a **consistent, reproducible** model error (picking
+  the 2565 column instead of the 2567 column from the same three-year row), a harder
+  problem than a context-size misconfiguration.
+- Full 30-question re-run: **27/30 (90%)**, same aggregate as before this round, but
+  composition shifted - Q8 and Q23 are now confirmed to answer correctly, while Q19
+  (net-margin question, previously always correct) failed once this run by reading a
+  *different but adjacent* row of the same ratio table (3.67, the unrestricted net
+  margin, instead of 2.9, the margin attributable to parent shareholders) after the
+  now-larger retrieved context surfaced that table more prominently. Same underlying
+  limitation as Q26/Q14/Q27, not a regression these fixes introduced - the fixes
+  improved *retrieval*, which in turn gives the model more opportunities to demonstrate
+  the same *numeric-column-selection* weakness on adjacent-but-distinct table rows.
+
+**Decision (per explicit instruction): stop here, do not implement self-consistency /
+majority-vote or any other mitigation for the numeric-extraction limitation now.** It's
+recorded as a known limitation - see the flakiness note above and this round's Q19/Q26
+findings - for a future session to pick up if wanted.
