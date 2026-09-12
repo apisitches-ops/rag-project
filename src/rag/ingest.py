@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -45,11 +44,24 @@ def ingest_pdf(pdf_path: Path, vector_store: Chroma) -> int:
     return len(chunks)
 
 
+def discover_pdfs(raw_dir: Path) -> list[Path]:
+    return sorted(raw_dir.glob("*.pdf"))
+
+
+def is_already_ingested(vector_store: Chroma, source_filename: str) -> bool:
+    existing = vector_store.get(where={"source": source_filename}, limit=1)
+    return len(existing["ids"]) > 0
+
+
 def main() -> None:
-    pdf_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/raw/20260316-ptt-one-report-2024-th.pdf")
+    raw_dir = Path("data/raw")
     vector_store = get_vector_store()
-    count = ingest_pdf(pdf_path, vector_store)
-    print(f"Ingested {count} chunks from {pdf_path.name}")
+    for pdf_path in discover_pdfs(raw_dir):
+        if is_already_ingested(vector_store, pdf_path.name):
+            print(f"Skipping {pdf_path.name} (already ingested)")
+            continue
+        count = ingest_pdf(pdf_path, vector_store)
+        print(f"Ingested {count} chunks from {pdf_path.name}")
 
 
 if __name__ == "__main__":
