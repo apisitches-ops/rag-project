@@ -25,7 +25,7 @@ On the final line of your reply, output exactly "Used: " followed by a comma-sep
 of the chunk numbers you actually drew on to answer (e.g. "Used: 1, 3"), or "Used: none" if \
 you couldn't answer from the chunks."""
 
-_USED_LINE = re.compile(r"^used:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
+_USED_LINE = re.compile(r"^\s*used:\s*(none|\d+(?:\s*,\s*\d+)*)\s*$", re.IGNORECASE | re.MULTILINE)
 
 
 def retrieve(vector_store: Chroma, question: str, k: int = TOP_K) -> list[tuple[Chunk, float]]:
@@ -45,9 +45,10 @@ def _extract_used_line(answer: str) -> tuple[str, str | None]:
 
     Matched anywhere a line starts with it (re.MULTILINE), not just when
     it's the literal last line - models often add trailing remarks after
-    it - but anchored to line-start so "the fuel used: coal" mid-sentence
-    isn't mistaken for the marker. If it appears more than once, the last
-    occurrence is taken as the intended one.
+    it. The captured value is constrained to "none" or a digit list, so a
+    prose line that merely starts with "used:" (mid-sentence or not) can't
+    be mistaken for the marker - only a line that also has the expected
+    shape counts.
     """
     matches = list(_USED_LINE.finditer(answer))
     if not matches:
