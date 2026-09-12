@@ -92,15 +92,31 @@ def answer_question(vector_store: Chroma, llm: ChatOllama, question: str) -> str
     return f"{answer}\n\nSources:\n{citations}" if citations else answer
 
 
+def _run_interactive(vector_store: Chroma, llm: ChatOllama) -> None:
+    print("Interactive mode. Type a question, or 'exit'/'quit' to leave.")
+    while True:
+        try:
+            question = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not question:
+            continue
+        if question.lower() in {"exit", "quit"}:
+            break
+        print(answer_question(vector_store, llm, question))
+        print()
+
+
 def main() -> None:
     question = " ".join(sys.argv[1:])
-    if not question:
-        print("Usage: python -m rag.query <question>")
-        return
-
     vector_store = get_vector_store()
     llm = ChatOllama(model=GENERATION_MODEL)
-    print(answer_question(vector_store, llm, question))
+
+    if question:
+        print(answer_question(vector_store, llm, question))
+    else:
+        _run_interactive(vector_store, llm)
 
 
 if __name__ == "__main__":
