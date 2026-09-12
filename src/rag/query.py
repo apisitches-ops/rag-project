@@ -25,7 +25,10 @@ On the final line of your reply, output exactly "Used: " followed by a comma-sep
 of the chunk numbers you actually drew on to answer (e.g. "Used: 1, 3"), or "Used: none" if \
 you couldn't answer from the chunks."""
 
-_USED_LINE = re.compile(r"^\s*used:\s*(none|\d+(?:\s*,\s*\d+)*)\s*$", re.IGNORECASE | re.MULTILINE)
+_USED_LINE = re.compile(
+    r"^\s*[*_]*\s*used:\s*(none|\d+(?:\s*,\s*\d+)*)\s*[*_]*[.!]?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def retrieve(vector_store: Chroma, question: str, k: int = TOP_K) -> list[tuple[Chunk, float]]:
