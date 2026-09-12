@@ -3,22 +3,29 @@ import sys
 
 from langchain_chroma import Chroma
 from langchain_ollama import ChatOllama
+from pythainlp.tokenize import word_tokenize
 
 from rag.ingest import get_vector_store
 from rag.text_processing import Chunk, select_chunks
 
 GENERATION_MODEL = "llama3.1:8b"
-TOP_K = 5
+TOP_K = 10
 SIMILARITY_THRESHOLD = 0.3
+MAX_KEYWORD_PHRASES = 5
+KEYWORD_MATCHES_PER_PHRASE = 5
 
 _THAI_CHAR_PATTERN = re.compile(r"[ก-๙]")
 
-PROMPT_TEMPLATE = """Answer the question using ONLY the numbered chunks below. You MUST write \
-your entire answer in {language}, regardless of what language the chunks themselves are \
-written in - if a chunk is already in {language}, you may quote it directly; if it's in a \
-different language, translate the facts you use into {language} rather than quoting the \
-original wording. If the chunks don't contain the answer, say so in {language} instead of \
-guessing.
+PROMPT_TEMPLATE = """Answer the question using ONLY the numbered chunks below. Several chunks \
+may look topically related without actually answering the specific question - before using a \
+chunk, check that it names the exact entity/line-item the question asks about (e.g. "total \
+assets" is not the same line as "total current assets"; one shareholder or subsidiary is not \
+the same as another), and prefer the chunk that matches most precisely over one that is merely \
+related. You MUST write your entire answer in {language}, regardless of what language the \
+chunks themselves are written in - if a chunk is already in {language}, you may quote it \
+directly; if it's in a different language, translate the facts you use into {language} rather \
+than quoting the original wording. If the chunks don't contain the answer, say so in {language} \
+instead of guessing.
 
 {chunks}
 
@@ -36,12 +43,64 @@ _USED_LINE = re.compile(
 )
 
 
+def _keyword_phrases(question: str) -> list[str]:
+    """2- and 3-token contiguous phrases from the question, longest first.
+
+    Exact Thai financial terms (e.g. "สินทรัพย์ รวม") are often two tokens
+    that embedding similarity alone can rank surprisingly low - literal
+    substring matching on the phrase catches them regardless of embedding
+    rank. Not filtered by stopwords: a word like "รวม" ("total") is generic
+    alone but load-bearing as part of a compound term.
+    """
+    tokens = [t for t in word_tokenize(question, engine="newmm") if _THAI_CHAR_PATTERN.search(t)]
+    phrases = set()
+    for n in (3, 2):
+        for i in range(len(tokens) - n + 1):
+            phrases.add(" ".join(tokens[i : i + n]))
+    return sorted(phrases, key=len, reverse=True)[:MAX_KEYWORD_PHRASES]
+
+
+def _keyword_matches(vector_store: Chroma, question: str) -> list[Chunk]:
+    chunks = []
+    seen_ids = set()
+    for phrase in _keyword_phrases(question):
+        result = vector_store.get(
+            where_document={"$contains": phrase},
+            limit=KEYWORD_MATCHES_PER_PHRASE + 1,
+            include=["documents", "metadatas"],
+        )
+        if len(result["ids"]) > KEYWORD_MATCHES_PER_PHRASE:
+            # A phrase common enough to hit more than the limit is too generic
+            # to trust as an exact-match boost (e.g. "ตลาดหลักทรัพย์ แห่ง" -
+            # part of "Stock Exchange of Thailand", named on ~17 pages of a
+            # financial report) - skip it rather than flood the context.
+            continue
+        for doc_id, doc, meta in zip(result["ids"], result["documents"], result["metadatas"]):
+            if doc_id in seen_ids:
+                continue
+            seen_ids.add(doc_id)
+            chunks.append(Chunk(text=doc, source=meta["source"], page=meta["page"]))
+    return chunks
+
+
 def retrieve(vector_store: Chroma, question: str, k: int = TOP_K) -> list[tuple[Chunk, float]]:
+    """Hybrid retrieval: embedding similarity search, plus a keyword-phrase
+    fallback for exact-term matches the embedding ranks low (see
+    _keyword_phrases). Keyword hits are scored at exactly the threshold, so
+    they clear select_chunks's gate without outranking genuine embedding
+    matches.
+    """
     results = vector_store.similarity_search_with_relevance_scores(question, k=k)
-    return [
+    scored = [
         (Chunk(text=doc.page_content, source=doc.metadata["source"], page=doc.metadata["page"]), score)
         for doc, score in results
     ]
+    seen_texts = {chunk.text for chunk, _ in scored}
+    for chunk in _keyword_matches(vector_store, question):
+        if chunk.text not in seen_texts:
+            scored.append((chunk, SIMILARITY_THRESHOLD))
+            seen_texts.add(chunk.text)
+    return scored
 
 
 def _format_chunks(chunks: list[Chunk]) -> str:
