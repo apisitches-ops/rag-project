@@ -14,9 +14,11 @@ SIMILARITY_THRESHOLD = 0.3
 _THAI_CHAR_PATTERN = re.compile(r"[ก-๙]")
 
 PROMPT_TEMPLATE = """Answer the question using ONLY the numbered chunks below. You MUST write \
-your entire answer in {language}, even though the chunks themselves are written in Thai - \
-translate any facts you use into {language} rather than quoting the original wording. If the \
-chunks don't contain the answer, say so in {language} instead of guessing.
+your entire answer in {language}, regardless of what language the chunks themselves are \
+written in - if a chunk is already in {language}, you may quote it directly; if it's in a \
+different language, translate the facts you use into {language} rather than quoting the \
+original wording. If the chunks don't contain the answer, say so in {language} instead of \
+guessing.
 
 {chunks}
 
@@ -89,7 +91,7 @@ def _detect_language(question: str) -> str:
 
 
 def _no_match_response(question: str) -> str:
-    if _THAI_CHAR_PATTERN.search(question):
+    if _detect_language(question) == "Thai":
         return "ไม่พบข้อมูลที่เกี่ยวข้องในเอกสารที่มีอยู่สำหรับคำถามนี้"
     return "No relevant information was found in the ingested documents for this question."
 
