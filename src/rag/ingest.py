@@ -45,12 +45,20 @@ def ingest_pdf(pdf_path: Path, vector_store: Chroma) -> int:
 
 
 def discover_pdfs(raw_dir: Path) -> list[Path]:
-    return sorted(raw_dir.glob("*.pdf"))
+    return sorted(p for p in raw_dir.iterdir() if p.suffix.lower() == ".pdf")
 
 
 def is_already_ingested(vector_store: Chroma, source_filename: str) -> bool:
     existing = vector_store.get(where={"source": source_filename}, limit=1)
     return len(existing["ids"]) > 0
+
+
+def _delete_by_source(vector_store: Chroma, source_filename: str) -> None:
+    """Remove any Chunks already stored for a source, so a failed/interrupted
+    ingest doesn't leave it half-indexed and permanently skipped."""
+    existing = vector_store.get(where={"source": source_filename})
+    if existing["ids"]:
+        vector_store.delete(ids=existing["ids"])
 
 
 def main() -> None:
@@ -60,8 +68,12 @@ def main() -> None:
         if is_already_ingested(vector_store, pdf_path.name):
             print(f"Skipping {pdf_path.name} (already ingested)")
             continue
-        count = ingest_pdf(pdf_path, vector_store)
-        print(f"Ingested {count} chunks from {pdf_path.name}")
+        try:
+            count = ingest_pdf(pdf_path, vector_store)
+            print(f"Ingested {count} chunks from {pdf_path.name}")
+        except Exception as e:
+            _delete_by_source(vector_store, pdf_path.name)
+            print(f"Failed to ingest {pdf_path.name}: {e}")
 
 
 if __name__ == "__main__":
