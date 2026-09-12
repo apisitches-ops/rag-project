@@ -40,10 +40,15 @@ found" message, not a fabricated answer.
    **Expected:** No relevant information found response (this question has nothing to
    do with the ingested report).
 
+7. **Q (English, regression guard):** How many employees does PTT have?
+   **Expected:** 3,605 employees (2,224 male, 1,381 female) as of Dec 31, 2024, in
+   English — page 147. Added after this exact question surfaced the language-matching
+   bug noted below; keep it here to catch a regression.
+
 ## Last verified run (2026-09-12)
 
 Ran against the implementation as of commit `10ec28d` (bge-m3 embeddings, llama3.1:8b
-generation, threshold 0.3). All 6 passed:
+generation, threshold 0.3, language-name-explicit prompt). All 7 passed:
 
 | # | Result | Cited page(s) |
 |---|--------|----------------|
@@ -53,6 +58,25 @@ generation, threshold 0.3). All 6 passed:
 | 4 | Correct ("6 กลุ่ม") | 125 |
 | 5 | Correct ("ปี 2593") | 128 (among others) |
 | 6 | Correct no-match response | — |
+| 7 | Correct, in English, across 3 repeated runs | 147 |
+
+### Known issue found and fixed: English questions sometimes answered in Thai
+
+Manual testing after the initial pass turned up a real bug: asking question 7 in
+English ("How many employees does PTT have?") reliably got a **Thai** answer instead
+of English (once even an empty answer body, just the citation) - reproducible across
+3 separate runs - even though question 1's English phrasing ("What is PTT's vision?")
+worked fine. Likely cause: with `PROMPT_TEMPLATE`'s original vague "reply in the same
+language the question was asked in" instruction, and a fully Thai-language context of
+retrieved chunks, llama3.1:8b would sometimes let the context's language override the
+instruction, apparently more often for some questions/topics than others.
+
+Fix: the prompt now names the required language explicitly (computed from a simple
+Thai-script check on the question, the same heuristic `_no_match_response` already
+used) and states it twice - once up front, once again as a reminder right before the
+model is asked to answer - instead of asking the model to infer and remember "the same
+language as the question" implicitly. Verified fixed: 3/3 repeated runs of question 7
+after the fix answered correctly in English, with no regression on the Thai questions.
 
 Note: question 2 was originally phrased asking for month *and* year
 ("...เมื่อเดือนและปีใด"). The source sentence names two different months in the same

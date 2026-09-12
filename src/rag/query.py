@@ -13,13 +13,16 @@ SIMILARITY_THRESHOLD = 0.3
 
 _THAI_CHAR_PATTERN = re.compile(r"[ก-๙]")
 
-PROMPT_TEMPLATE = """Answer the question using ONLY the numbered chunks below. Reply in the \
-same language the question was asked in (Thai or English). If the chunks don't contain \
-the answer, say so instead of guessing.
+PROMPT_TEMPLATE = """Answer the question using ONLY the numbered chunks below. You MUST write \
+your entire answer in {language}, even though the chunks themselves are written in Thai - \
+translate any facts you use into {language} rather than quoting the original wording. If the \
+chunks don't contain the answer, say so in {language} instead of guessing.
 
 {chunks}
 
 Question: {question}
+
+Reminder: write your answer in {language}, not any other language.
 
 On the final line of your reply, output exactly "Used: " followed by a comma-separated list \
 of the chunk numbers you actually drew on to answer (e.g. "Used: 1, 3"), or "Used: none" if \
@@ -81,6 +84,10 @@ def _format_citations(chunks: list[Chunk], used_indices: set[int]) -> str:
     return "\n".join(f"- {tag}" for tag in tags)
 
 
+def _detect_language(question: str) -> str:
+    return "Thai" if _THAI_CHAR_PATTERN.search(question) else "English"
+
+
 def _no_match_response(question: str) -> str:
     if _THAI_CHAR_PATTERN.search(question):
         return "ไม่พบข้อมูลที่เกี่ยวข้องในเอกสารที่มีอยู่สำหรับคำถามนี้"
@@ -93,7 +100,8 @@ def answer_question(vector_store: Chroma, llm: ChatOllama, question: str) -> str
     if chunks is None:
         return _no_match_response(question)
 
-    prompt = PROMPT_TEMPLATE.format(chunks=_format_chunks(chunks), question=question)
+    language = _detect_language(question)
+    prompt = PROMPT_TEMPLATE.format(chunks=_format_chunks(chunks), question=question, language=language)
     raw_answer = llm.invoke(prompt).content
 
     answer, used_value = _extract_used_line(raw_answer)
