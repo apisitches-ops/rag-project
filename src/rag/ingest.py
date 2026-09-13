@@ -4,6 +4,7 @@ from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 from pypdf import PdfReader
 
+from rag.retry import with_retry
 from rag.text_processing import chunk_text, normalize_text
 
 EMBEDDING_MODEL = "bge-m3"
@@ -37,7 +38,8 @@ def ingest_pdf(pdf_path: Path, vector_store: Chroma) -> int:
 
     for start in range(0, len(chunks), EMBED_BATCH_SIZE):
         batch = chunks[start : start + EMBED_BATCH_SIZE]
-        vector_store.add_texts(
+        with_retry(
+            vector_store.add_texts,
             texts=[chunk.text for chunk in batch],
             metadatas=[{"source": chunk.source, "page": chunk.page} for chunk in batch],
         )

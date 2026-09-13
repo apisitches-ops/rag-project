@@ -6,6 +6,7 @@ from langchain_ollama import ChatOllama
 from pythainlp.tokenize import word_tokenize
 
 from rag.ingest import get_vector_store
+from rag.retry import with_retry
 from rag.text_processing import Chunk, select_chunks
 
 GENERATION_MODEL = "llama3.1:8b"
@@ -103,7 +104,7 @@ def retrieve(vector_store: Chroma, question: str, k: int = TOP_K) -> list[tuple[
     they clear select_chunks's gate without outranking genuine embedding
     matches.
     """
-    results = vector_store.similarity_search_with_relevance_scores(question, k=k)
+    results = with_retry(vector_store.similarity_search_with_relevance_scores, question, k=k)
     scored = [
         (Chunk(text=doc.page_content, source=doc.metadata["source"], page=doc.metadata["page"]), score)
         for doc, score in results
@@ -176,7 +177,7 @@ def answer_question(vector_store: Chroma, llm: ChatOllama, question: str) -> str
 
     language = _detect_language(question)
     prompt = PROMPT_TEMPLATE.format(chunks=_format_chunks(chunks), question=question, language=language)
-    raw_answer = llm.invoke(prompt).content
+    raw_answer = with_retry(llm.invoke, prompt).content
 
     answer, used_value = _extract_used_line(raw_answer)
     used_indices = _parse_used_indices(used_value, len(chunks))

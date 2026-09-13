@@ -1,5 +1,7 @@
 # Local RAG for Thai/English PDF Reports
 
+![Tests](https://github.com/apisitches-ops/rag-project/actions/workflows/tests.yml/badge.svg)
+
 A retrieval-augmented generation (RAG) system that answers questions about long PDF
 reports — built and validated against a 233-page Thai-language corporate annual
 report — with **every model running locally via [Ollama](https://ollama.com)**. No
@@ -99,6 +101,9 @@ ships the pipeline, not the documents or the index. Bring your own PDFs.
 PYTHONPATH=src ./venv/bin/python scripts/eval30.py   # 30-question correctness suite (~15 min, hits Ollama)
 ```
 
+Unit tests run automatically on every push/PR via [GitHub Actions](.github/workflows/tests.yml).
+`eval30.py` needs a local Ollama instance and isn't run in CI.
+
 | | Score |
 |---|---|
 | Baseline | 23/30 (77%) |
@@ -146,8 +151,11 @@ src/rag/
                         (no I/O — unit tested directly, no Ollama required)
   ingest.py             PDF → chunks → embeddings → Chroma
   query.py              question → retrieval → threshold gate → generation → citations
+  retry.py              retry-with-backoff wrapper around the Ollama calls in
+                        ingest.py/query.py (transient connection/timeout errors only)
 tests/                  unit tests for the pure logic layer
 scripts/eval30.py        30-question correctness benchmark
+.github/workflows/      CI: runs the unit test suite on every push/PR
 docs/
   eval-set.md                    5-question hand-curated eval set
   eval-set-30-stress-test.md     30-question test, first-pass results + root causes
@@ -173,3 +181,5 @@ Python 3.11 · [LangChain](https://python.langchain.com/) (`langchain-ollama`,
 `langchain-chroma`, `langchain-text-splitters`) · [ChromaDB](https://www.trychroma.com/)
 · [Ollama](https://ollama.com) running `bge-m3` (embeddings) and `llama3.1:8b`
 (generation) · [pythainlp](https://pythainlp.github.io/) · `pypdf` · `pytest`
+
+All dependency versions are pinned in [`requirements.txt`](requirements.txt).
